@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>English → Chinese Translator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 { font-size: 1.75rem; font-weight: 600; color: #1a1a1a; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+    /* API key bar */
+    .api-bar {
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      align-items: center;
+    }
+
+    .api-bar label { font-size: 0.82rem; color: #555; white-space: nowrap; }
+
+    .api-bar input {
+      flex: 1;
+      padding: 0.45rem 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-family: monospace;
+      outline: none;
+    }
+
+    .api-bar input:focus { border-color: #2563eb; }
+
+    .api-bar button {
+      padding: 0.45rem 0.9rem;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .api-bar button:hover { background: #1d4ed8; }
+
+    .api-note {
+      font-size: 0.75rem;
+      color: #999;
+      width: 100%;
+      max-width: 860px;
+      margin-bottom: 1.25rem;
+    }
+
+    /* Main card */
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      width: 100%;
+      max-width: 860px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+    }
+
+    .pane { padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .pane + .pane { border-left: 1px solid #eee; }
+
+    .pane-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    textarea {
+      flex: 1;
+      min-height: 260px;
+      resize: none;
+      border: none;
+      outline: none;
+      font-size: 1rem;
+      line-height: 1.6;
+      color: #1a1a1a;
+      font-family: inherit;
+    }
+
+    .output {
+      flex: 1;
+      min-height: 260px;
+      font-size: 1rem;
+      line-height: 1.8;
+      color: #1a1a1a;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .output.placeholder { color: #bbb; font-style: italic; }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1.25rem;
+      grid-column: 1 / -1;
+      border-top: 1px solid #eee;
+      background: #fafafa;
+    }
+
+    .char-count { font-size: 0.8rem; color: #999; }
+    .btn-row { display: flex; gap: 0.5rem; }
+
+    button {
+      padding: 0.5rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    #translate-btn { background: #2563eb; color: white; }
+    #translate-btn:hover:not(:disabled) { background: #1d4ed8; }
+    #translate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #clear-btn { background: #f0f0f0; color: #444; }
+    #clear-btn:hover { background: #e4e4e4; }
+
+    .spinner {
+      display: none;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    #translate-btn.loading .spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid #ddd;
+      color: #555;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    .copy-btn:hover { background: #f5f5f5; }
+
+    .error-msg { color: #dc2626; font-size: 0.85rem; font-style: normal; }
+
+    @media (max-width: 600px) {
+      .card { grid-template-columns: 1fr; }
+      .pane + .pane { border-left: none; border-top: 1px solid #eee; }
+    }
+  </style>
+</head>
+<body>
+  <h1>English → Chinese Translator</h1>
+  <p class="subtitle">Powered by Claude</p>
+
+  <div class="api-bar">
+    <label for="api-key">API Key:</label>
+    <input type="password" id="api-key" placeholder="sk-ant-…" autocomplete="off" />
+    <button id="save-key-btn">Save</button>
+  </div>
+  <p class="api-note">Your key is saved only in your browser's local storage and never sent anywhere except Anthropic's API.</p>
+
+  <div class="card">
+    <div class="pane">
+      <span class="pane-label">English</span>
+      <textarea id="input" placeholder="Type or paste English text here…"></textarea>
+    </div>
+    <div class="pane">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="pane-label">Chinese (Simplified)</span>
+        <button class="copy-btn" id="copy-btn">Copy</button>
+      </div>
+      <div class="output placeholder" id="output">Translation will appear here…</div>
+    </div>
+
+    <div class="toolbar">
+      <span class="char-count" id="char-count">0 characters</span>
+      <div class="btn-row">
+        <button id="clear-btn">Clear</button>
+        <button id="translate-btn">
+          <span class="spinner"></span>
+          <span id="btn-label">Translate</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const inputEl    = document.getElementById("input");
+    const outputEl   = document.getElementById("output");
+    const charCount  = document.getElementById("char-count");
+    const translateBtn = document.getElementById("translate-btn");
+    const clearBtn   = document.getElementById("clear-btn");
+    const copyBtn    = document.getElementById("copy-btn");
+    const btnLabel   = document.getElementById("btn-label");
+    const apiKeyEl   = document.getElementById("api-key");
+    const saveKeyBtn = document.getElementById("save-key-btn");
+
+    // Load saved key
+    apiKeyEl.value = localStorage.getItem("anthropic_api_key") || "";
+
+    saveKeyBtn.addEventListener("click", () => {
+      localStorage.setItem("anthropic_api_key", apiKeyEl.value.trim());
+      saveKeyBtn.textContent = "Saved!";
+      setTimeout(() => saveKeyBtn.textContent = "Save", 1500);
+    });
+
+    inputEl.addEventListener("input", () => {
+      const len = inputEl.value.length;
+      charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
+    });
+
+    clearBtn.addEventListener("click", () => {
+      inputEl.value = "";
+      charCount.textContent = "0 characters";
+      setOutput("Translation will appear here…", true);
+    });
+
+    copyBtn.addEventListener("click", () => {
+      if (outputEl.classList.contains("placeholder")) return;
+      navigator.clipboard.writeText(outputEl.textContent).then(() => {
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => copyBtn.textContent = "Copy", 1500);
+      });
+    });
+
+    translateBtn.addEventListener("click", translate);
+    inputEl.addEventListener("keydown", e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") translate();
+    });
+
+    function setOutput(text, isPlaceholder, isError) {
+      outputEl.textContent = text;
+      outputEl.classList.toggle("placeholder", isPlaceholder);
+      outputEl.classList.toggle("error-msg", !!isError);
+    }
+
+    async function translate() {
+      const text = inputEl.value.trim();
+      if (!text) return;
+
+      const apiKey = apiKeyEl.value.trim() || localStorage.getItem("anthropic_api_key") || "";
+      if (!apiKey) {
+        setOutput("Please enter your Anthropic API key above.", true, true);
+        return;
+      }
+
+      translateBtn.disabled = true;
+      translateBtn.classList.add("loading");
+      btnLabel.textContent = "Translating…";
+      setOutput("", false);
+
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
+          body: JSON.stringify({
+            model: "claude-opus-4-7",
+            max_tokens: 4096,
+            stream: true,
+            system: "You are a professional English to Chinese (Simplified) translator. Translate the user's English text to Chinese. Output only the translation, nothing else — no explanations, no labels, no extra text.",
+            messages: [{ role: "user", content: text }],
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setOutput(`Error ${res.status}: ${err?.error?.message || res.statusText}`, false, true);
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let result = "";
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop(); // keep incomplete last line
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") continue;
+            try {
+              const event = JSON.parse(data);
+              if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+                result += event.delta.text;
+                outputEl.textContent = result;
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (!result) setOutput("(No translation returned)", true);
+      } catch (err) {
+        setOutput(`Error: ${err.message}`, false, true);
+      } finally {
+        translateBtn.disabled = false;
+        translateBtn.classList.remove("loading");
+        btnLabel.textContent = "Translate";
+      }
+    }
+  </script>
+</body>
+</html>
