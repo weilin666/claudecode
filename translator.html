@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>English → Chinese Translator</title>
+  <title>English → Chinese Translator (Gemini)</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -175,14 +175,14 @@
 </head>
 <body>
   <h1>English → Chinese Translator</h1>
-  <p class="subtitle">Powered by Claude</p>
+  <p class="subtitle">Powered by Google Gemini (free)</p>
 
   <div class="api-bar">
     <label for="api-key">API Key:</label>
-    <input type="password" id="api-key" placeholder="sk-ant-…" autocomplete="off" />
+    <input type="password" id="api-key" placeholder="AIza…" autocomplete="off" />
     <button id="save-key-btn">Save</button>
   </div>
-  <p class="api-note">Your key is saved only in your browser's local storage and never sent anywhere except Anthropic's API.</p>
+  <p class="api-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> — no credit card needed. Your key is saved only in your browser's local storage.</p>
 
   <div class="card">
     <div class="pane">
@@ -221,10 +221,10 @@
     const saveKeyBtn = document.getElementById("save-key-btn");
 
     // Load saved key
-    apiKeyEl.value = localStorage.getItem("anthropic_api_key") || "";
+    apiKeyEl.value = localStorage.getItem("gemini_api_key") || "";
 
     saveKeyBtn.addEventListener("click", () => {
-      localStorage.setItem("anthropic_api_key", apiKeyEl.value.trim());
+      localStorage.setItem("gemini_api_key", apiKeyEl.value.trim());
       saveKeyBtn.textContent = "Saved!";
       setTimeout(() => saveKeyBtn.textContent = "Save", 1500);
     });
@@ -263,9 +263,9 @@
       const text = inputEl.value.trim();
       if (!text) return;
 
-      const apiKey = apiKeyEl.value.trim() || localStorage.getItem("anthropic_api_key") || "";
+      const apiKey = apiKeyEl.value.trim() || localStorage.getItem("gemini_api_key") || "";
       if (!apiKey) {
-        setOutput("Please enter your Anthropic API key above.", true, true);
+        setOutput("Please enter your Gemini API key above.", false, true);
         return;
       }
 
@@ -275,20 +275,16 @@
       setOutput("", false);
 
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
+
+        const res = await fetch(url, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "claude-opus-4-7",
-            max_tokens: 4096,
-            stream: true,
-            system: "You are a professional English to Chinese (Simplified) translator. Translate the user's English text to Chinese. Output only the translation, nothing else — no explanations, no labels, no extra text.",
-            messages: [{ role: "user", content: text }],
+            system_instruction: {
+              parts: [{ text: "You are a professional English to Chinese (Simplified) translator. Translate the user's English text to Chinese. Output only the translation, nothing else — no explanations, no labels, no extra text." }]
+            },
+            contents: [{ role: "user", parts: [{ text }] }],
           }),
         });
 
@@ -309,16 +305,16 @@
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
-          buffer = lines.pop(); // keep incomplete last line
+          buffer = lines.pop();
 
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6).trim();
-            if (data === "[DONE]") continue;
             try {
               const event = JSON.parse(data);
-              if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
-                result += event.delta.text;
+              const chunk = event?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (chunk) {
+                result += chunk;
                 outputEl.textContent = result;
               }
             } catch (_) {}
