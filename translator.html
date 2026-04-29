@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>English → Chinese Translator (Gemini)</title>
+  <title>English → Chinese Translator</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -18,53 +18,8 @@
     }
 
     h1 { font-size: 1.75rem; font-weight: 600; color: #1a1a1a; margin-bottom: 0.25rem; }
-    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
 
-    /* API key bar */
-    .api-bar {
-      width: 100%;
-      max-width: 860px;
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-      align-items: center;
-    }
-
-    .api-bar label { font-size: 0.82rem; color: #555; white-space: nowrap; }
-
-    .api-bar input {
-      flex: 1;
-      padding: 0.45rem 0.75rem;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      font-family: monospace;
-      outline: none;
-    }
-
-    .api-bar input:focus { border-color: #2563eb; }
-
-    .api-bar button {
-      padding: 0.45rem 0.9rem;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.82rem;
-      cursor: pointer;
-    }
-
-    .api-bar button:hover { background: #1d4ed8; }
-
-    .api-note {
-      font-size: 0.75rem;
-      color: #999;
-      width: 100%;
-      max-width: 860px;
-      margin-bottom: 1.25rem;
-    }
-
-    /* Main card */
     .card {
       background: white;
       border-radius: 12px;
@@ -110,6 +65,7 @@
     }
 
     .output.placeholder { color: #bbb; font-style: italic; }
+    .output.error { color: #dc2626; font-style: normal; font-size: 0.88rem; }
 
     .toolbar {
       display: flex;
@@ -162,10 +118,7 @@
       padding: 0.3rem 0.75rem;
       font-size: 0.8rem;
     }
-
     .copy-btn:hover { background: #f5f5f5; }
-
-    .error-msg { color: #dc2626; font-size: 0.85rem; font-style: normal; }
 
     @media (max-width: 600px) {
       .card { grid-template-columns: 1fr; }
@@ -175,19 +128,12 @@
 </head>
 <body>
   <h1>English → Chinese Translator</h1>
-  <p class="subtitle">Powered by Google Gemini (free)</p>
-
-  <div class="api-bar">
-    <label for="api-key">API Key:</label>
-    <input type="password" id="api-key" placeholder="AIza…" autocomplete="off" />
-    <button id="save-key-btn">Save</button>
-  </div>
-  <p class="api-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> — no credit card needed. Your key is saved only in your browser's local storage.</p>
+  <p class="subtitle">Free · No API key needed · Powered by MyMemory</p>
 
   <div class="card">
     <div class="pane">
       <span class="pane-label">English</span>
-      <textarea id="input" placeholder="Type or paste English text here…"></textarea>
+      <textarea id="input" placeholder="Type or paste English text here…" autofocus></textarea>
     </div>
     <div class="pane">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -210,24 +156,13 @@
   </div>
 
   <script>
-    const inputEl    = document.getElementById("input");
-    const outputEl   = document.getElementById("output");
-    const charCount  = document.getElementById("char-count");
+    const inputEl      = document.getElementById("input");
+    const outputEl     = document.getElementById("output");
+    const charCount    = document.getElementById("char-count");
     const translateBtn = document.getElementById("translate-btn");
-    const clearBtn   = document.getElementById("clear-btn");
-    const copyBtn    = document.getElementById("copy-btn");
-    const btnLabel   = document.getElementById("btn-label");
-    const apiKeyEl   = document.getElementById("api-key");
-    const saveKeyBtn = document.getElementById("save-key-btn");
-
-    // Load saved key
-    apiKeyEl.value = localStorage.getItem("gemini_api_key") || "";
-
-    saveKeyBtn.addEventListener("click", () => {
-      localStorage.setItem("gemini_api_key", apiKeyEl.value.trim());
-      saveKeyBtn.textContent = "Saved!";
-      setTimeout(() => saveKeyBtn.textContent = "Save", 1500);
-    });
+    const clearBtn     = document.getElementById("clear-btn");
+    const copyBtn      = document.getElementById("copy-btn");
+    const btnLabel     = document.getElementById("btn-label");
 
     inputEl.addEventListener("input", () => {
       const len = inputEl.value.length;
@@ -237,7 +172,7 @@
     clearBtn.addEventListener("click", () => {
       inputEl.value = "";
       charCount.textContent = "0 characters";
-      setOutput("Translation will appear here…", true);
+      setOutput("Translation will appear here…", "placeholder");
     });
 
     copyBtn.addEventListener("click", () => {
@@ -253,77 +188,64 @@
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") translate();
     });
 
-    function setOutput(text, isPlaceholder, isError) {
+    function setOutput(text, mode) {
+      // mode: "placeholder" | "error" | "result"
       outputEl.textContent = text;
-      outputEl.classList.toggle("placeholder", isPlaceholder);
-      outputEl.classList.toggle("error-msg", !!isError);
+      outputEl.classList.toggle("placeholder", mode === "placeholder");
+      outputEl.classList.toggle("error", mode === "error");
+    }
+
+    // Split long text into chunks ≤ 500 chars at sentence boundaries
+    function splitChunks(text, maxLen = 480) {
+      const sentences = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
+      const chunks = [];
+      let current = "";
+      for (const s of sentences) {
+        if ((current + s).length > maxLen && current) {
+          chunks.push(current.trim());
+          current = s;
+        } else {
+          current += s;
+        }
+      }
+      if (current.trim()) chunks.push(current.trim());
+      return chunks;
+    }
+
+    async function translateChunk(text) {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|zh-CN`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.responseStatus !== 200) throw new Error(data.responseDetails || "Translation failed");
+      return data.responseData.translatedText;
     }
 
     async function translate() {
       const text = inputEl.value.trim();
       if (!text) return;
 
-      const apiKey = apiKeyEl.value.trim() || localStorage.getItem("gemini_api_key") || "";
-      if (!apiKey) {
-        setOutput("Please enter your Gemini API key above.", false, true);
-        return;
-      }
-
       translateBtn.disabled = true;
       translateBtn.classList.add("loading");
       btnLabel.textContent = "Translating…";
-      setOutput("", false);
+      setOutput("", "result");
 
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`;
-
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: {
-              parts: [{ text: "You are a professional English to Chinese (Simplified) translator. Translate the user's English text to Chinese. Output only the translation, nothing else — no explanations, no labels, no extra text." }]
-            },
-            contents: [{ role: "user", parts: [{ text }] }],
-          }),
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          setOutput(`Error ${res.status}: ${err?.error?.message || res.statusText}`, false, true);
-          return;
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
+        const chunks = splitChunks(text);
         let result = "";
-        let buffer = "";
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop();
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
-            const data = line.slice(6).trim();
-            try {
-              const event = JSON.parse(data);
-              const chunk = event?.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (chunk) {
-                result += chunk;
-                outputEl.textContent = result;
-              }
-            } catch (_) {}
+        for (let i = 0; i < chunks.length; i++) {
+          if (chunks.length > 1) {
+            btnLabel.textContent = `Translating… ${i + 1}/${chunks.length}`;
           }
+          const translated = await translateChunk(chunks[i]);
+          result += (result ? " " : "") + translated;
+          outputEl.textContent = result;
         }
 
-        if (!result) setOutput("(No translation returned)", true);
+        if (!result) setOutput("(No translation returned)", "placeholder");
       } catch (err) {
-        setOutput(`Error: ${err.message}`, false, true);
+        setOutput(`Error: ${err.message}`, "error");
       } finally {
         translateBtn.disabled = false;
         translateBtn.classList.remove("loading");
