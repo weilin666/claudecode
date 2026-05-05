@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JFK → HKG Airfare Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #1c2128; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --blue: #58a6ff; --green: #3fb950;
+      --yellow: #d29922; --orange: #f0883e; --red: #f85149; --teal: #39d353;
+      --purple: #bc8cff;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+    /* ── Header ── */
+    .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+    .route { font-size: 1.5rem; font-weight: 700; letter-spacing: 1px; color: var(--blue); }
+    .route-arrow { color: var(--teal); margin: 0 .4rem; }
+    .header-sub { font-size: .8rem; color: var(--muted); margin-top: .2rem; }
+
+    /* ── Timer bar ── */
+    .timer-bar { background: var(--surface2); border-bottom: 1px solid var(--border); padding: .65rem 1.5rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--green); animation: blink 1.4s ease-in-out infinite; flex-shrink: 0; }
+    .pulse.warn { background: var(--yellow); }
+    .pulse.alert-p { background: var(--red); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+    .countdown { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--blue); min-width: 3.8rem; }
+    .countdown.warn { color: var(--yellow); }
+    .countdown.alert-c { color: var(--red); }
+    .progress-track { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; min-width: 80px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--blue)); border-radius: 2px; transition: width 1s linear; }
+    .btn { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .8rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: .8rem; font-weight: 500; cursor: pointer; text-decoration: none; transition: background .15s, border-color .15s; }
+    .btn:hover { background: var(--surface2); border-color: var(--blue); color: var(--blue); }
+    .btn-primary { background: #1f3a5f; border-color: var(--blue); color: var(--blue); }
+    .btn-primary:hover { background: #254e84; }
+    .btn-sm { padding: .2rem .5rem; font-size: .75rem; }
+    .ms-auto { margin-left: auto; }
+
+    /* ── Toast notification ── */
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: #1a3a1a; border: 1px solid var(--green); color: var(--teal); padding: .8rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: .9rem; z-index: 999; display: none; animation: slideUp .3s ease; }
+    .toast.show { display: block; }
+    @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+    /* ── Main content ── */
+    .main { padding: 1.25rem 1.5rem; }
+    .info-box { background: #1a2a3a; border: 1px solid #2d4a6e; border-radius: 8px; padding: .85rem 1.1rem; margin-bottom: 1.25rem; font-size: .82rem; color: #90cdf4; line-height: 1.6; }
+    .info-box strong { color: var(--blue); }
+    .info-steps { margin-top: .5rem; padding-left: 1.2rem; }
+    .info-steps li { margin: .15rem 0; }
+
+    /* ── Stats strip ── */
+    .stats-strip { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .6rem 1rem; flex: 1; min-width: 140px; }
+    .stat-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .stat-value { font-size: 1.3rem; font-weight: 700; margin-top: .1rem; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    thead th { background: var(--surface2); color: var(--muted); font-size: .71rem; text-transform: uppercase; letter-spacing: .07em; padding: .65rem 1rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tbody tr { border-bottom: 1px solid #1c2128; transition: background .12s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #1c2533; }
+    tbody tr.best-row { background: #0d2414; }
+    tbody tr.best-row:hover { background: #112d1a; }
+    td { padding: .7rem 1rem; vertical-align: middle; font-size: .88rem; }
+
+    .rank { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; }
+    .r1 { background: rgba(215,175,55,.15); border: 1px solid rgba(215,175,55,.4); color: #d7af37; }
+    .r2 { background: rgba(192,192,192,.1); border: 1px solid rgba(192,192,192,.3); color: #c0c0c0; }
+    .r3 { background: rgba(205,127,50,.12); border: 1px solid rgba(205,127,50,.35); color: #cd7f32; }
+    .rn { background: rgba(139,148,158,.08); border: 1px solid var(--border); color: var(--muted); }
+
+    .price-display { font-size: 1.1rem; font-weight: 700; }
+    .price-best { color: var(--green); }
+    .price-near { color: var(--orange); }
+    .price-norm { color: var(--text); }
+    .price-none { color: var(--muted); font-size: .82rem; font-weight: 400; font-style: italic; }
+
+    .price-input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 5px; padding: .3rem .5rem; font-size: .85rem; width: 100px; text-align: right; }
+    .price-input:focus { outline: none; border-color: var(--blue); }
+    .price-input::placeholder { color: var(--muted); font-style: italic; }
+
+    .date-chip { display: inline-block; padding: .15rem .5rem; border-radius: 20px; font-size: .78rem; font-weight: 600; }
+    .chip-out { background: #1a3052; color: #90cdf4; }
+    .chip-ret { background: #1a3a28; color: #9ae6b4; }
+
+    .age { font-size: .73rem; color: var(--muted); margin-top: .2rem; }
+    .age.fresh { color: var(--green); }
+    .age.stale { color: var(--yellow); }
+
+    .link-group { display: flex; gap: .35rem; flex-wrap: wrap; }
+    .site-btn { display: inline-flex; align-items: center; gap: .3rem; padding: .22rem .55rem; border-radius: 5px; font-size: .74rem; font-weight: 600; text-decoration: none; border: 1px solid; cursor: pointer; transition: opacity .15s; }
+    .site-btn:hover { opacity: .8; }
+    .google-btn { background: #1a2e1a; border-color: #2d5a2d; color: #5fb55f; }
+    .kayak-btn  { background: #2a1e0d; border-color: #6b4a1a; color: #d4a055; }
+    .sky-btn    { background: #0d1f3a; border-color: #1a4a8a; color: #5b9bd5; }
+    .notes-input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 5px; padding: .25rem .4rem; font-size: .76rem; width: 110px; }
+    .notes-input:focus { outline: none; border-color: var(--purple); }
+
+    /* ── Bottom action bar ── */
+    .action-bar { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: 1.25rem; }
+    .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .74rem; color: var(--muted); margin-top: 1rem; }
+    .legend span { display: flex; align-items: center; gap: .3rem; }
+
+    @media (max-width: 600px) { .main { padding: .75rem; } td, thead th { padding: .5rem .6rem; } }
+  </style>
+</head>
+<body>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="route">JFK <span class="route-arrow">⟶</span> HKG</div>
+    <div class="header-sub">Round-trip · 1 adult · Economy · Jul 10–12 out · Jul 31 – Aug 2, 2026 return</div>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <button class="btn btn-primary" onclick="openAll('google')">⚡ Open All in Google Flights</button>
+    <button class="btn" onclick="clearAllPrices()">🗑 Clear prices</button>
+  </div>
+</div>
+
+<!-- Timer bar -->
+<div class="timer-bar">
+  <div class="pulse" id="pulse"></div>
+  <span style="font-size:.82rem;color:var(--muted)">Next check in</span>
+  <span class="countdown" id="countdown">10:00</span>
+  <div class="progress-track"><div class="progress-fill" id="prog" style="width:100%"></div></div>
+  <button class="btn btn-sm" onclick="resetTimer()">↺ Reset timer</button>
+  <span class="ms-auto" id="last-check" style="font-size:.78rem;color:var(--muted)"></span>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <div class="info-box">
+    <strong>How to use</strong> — no API key or install needed, just a browser:
+    <ol class="info-steps">
+      <li>Click <strong>⚡ Open All in Google Flights</strong> to open all 9 date combos in new tabs.</li>
+      <li>For each tab, note the cheapest price and type it in the <em>Price (USD)</em> column below.</li>
+      <li>The table auto-sorts cheapest first. Prices are saved in your browser (localStorage).</li>
+      <li>The 10-minute timer reminds you to repeat. Click <strong>↺ Reset timer</strong> after each check.</li>
+    </ol>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-strip">
+    <div class="stat-card">
+      <div class="stat-label">Cheapest found</div>
+      <div class="stat-value" id="stat-cheapest" style="color:var(--green)">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Most expensive</div>
+      <div class="stat-value" id="stat-priciest" style="color:var(--muted)">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Combos tracked</div>
+      <div class="stat-value" id="stat-tracked" style="color:var(--blue)">0 / 9</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Best out date</div>
+      <div class="stat-value" id="stat-bestout" style="font-size:.95rem;color:var(--teal)">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Best return date</div>
+      <div class="stat-value" id="stat-bestret" style="font-size:.95rem;color:var(--teal)">—</div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Fly Out</th>
+          <th>Return</th>
+          <th>Price (USD)</th>
+          <th>Last Checked</th>
+          <th>Notes</th>
+          <th>Open Search</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Action bar -->
+  <div class="action-bar">
+    <button class="btn" onclick="openAll('kayak')">Open All – Kayak</button>
+    <button class="btn" onclick="openAll('skyscanner')">Open All – Skyscanner</button>
+    <button class="btn" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+
+  <div class="legend">
+    <span style="color:var(--green)">■ Best price</span>
+    <span style="color:var(--orange)">■ Within 10% of best</span>
+    <span style="color:var(--text)">■ Standard</span>
+    <span>Prices saved in browser localStorage — persist across page reloads.</span>
+  </div>
+
+</div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────
+const OUT_DATES = ['2026-07-10', '2026-07-11', '2026-07-12'];
+const RET_DATES = ['2026-07-31', '2026-08-01', '2026-08-02'];
+const REFRESH = 600; // seconds
+
+const COMBOS = [];
+OUT_DATES.forEach(o => RET_DATES.forEach(r => COMBOS.push({ out: o, ret: r })));
+
+const STORAGE_KEY = 'airfare_jfk_hkg_v1';
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
+}
+function save(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// ── URL generators ────────────────────────────────────────────────────────
+function googleUrl(out, ret) {
+  // Encodes as a readable Google Flights query
+  const od = new Date(out + 'T00:00:00');
+  const rd = new Date(ret + 'T00:00:00');
+  const ods = od.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const rds = rd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(`round trip flights JFK to HKG departing ${ods} returning ${rds}`)}`;
+}
+function kayakUrl(out, ret) {
+  return `https://www.kayak.com/flights/JFK-HKG/${out}/${ret}/1adults?sort=price_a`;
+}
+function skyscannerUrl(out, ret) {
+  // YYMMDD format
+  const fmt = d => d.replace(/-/g, '').substring(2);
+  return `https://www.skyscanner.com/transport/flights/jfk/hkg/${fmt(out)}/${fmt(ret)}/?adultsv2=1&cabinclass=economy&rtn=1&preferdirects=false&outboundaltsenabled=false&inboundaltsenabled=false`;
+}
+
+// ── Format helpers ────────────────────────────────────────────────────────
+function fmtDate(d) {
+  // '2026-07-10' -> 'Jul 10'
+  const [, , mm, dd] = d.match(/(\d{4})-(\d{2})-(\d{2})/);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[parseInt(mm)-1]} ${parseInt(dd)}`;
+}
+function fmtAge(ts) {
+  if (!ts) return '';
+  const secs = Math.floor((Date.now() - ts) / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  if (secs < 3600) return `${Math.floor(secs/60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs/3600)}h ago`;
+  return `${Math.floor(secs/86400)}d ago`;
+}
+function ageClass(ts) {
+  if (!ts) return '';
+  const mins = (Date.now() - ts) / 60000;
+  if (mins < 15) return 'fresh';
+  if (mins < 60) return 'stale';
+  return '';
+}
+function rankClass(i) {
+  return ['r1','r2','r3'][i] || 'rn';
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function renderTable() {
+  const data = load();
+
+  // Build rows with prices
+  const rows = COMBOS.map((c, idx) => {
+    const key = `${c.out}__${c.ret}`;
+    const entry = data[key] || {};
+    return { ...c, idx, key, price: entry.price || null, ts: entry.ts || null, notes: entry.notes || '' };
+  });
+
+  // Sort: rows with prices first (ascending), then unpriced
+  const priced = rows.filter(r => r.price !== null).sort((a, b) => a.price - b.price);
+  const unpriced = rows.filter(r => r.price === null);
+  const sorted = [...priced, ...unpriced];
+
+  // Price range for coloring
+  const prices = priced.map(r => r.price);
+  const minP = prices.length ? Math.min(...prices) : null;
+  const maxP = prices.length ? Math.max(...prices) : null;
+
+  // Stats
+  document.getElementById('stat-cheapest').textContent = minP !== null ? `$${minP.toLocaleString()}` : '—';
+  document.getElementById('stat-priciest').textContent = maxP !== null ? `$${maxP.toLocaleString()}` : '—';
+  document.getElementById('stat-tracked').textContent = `${priced.length} / 9`;
+
+  if (priced.length) {
+    const best = priced[0];
+    document.getElementById('stat-bestout').textContent = fmtDate(best.out);
+    document.getElementById('stat-bestret').textContent = fmtDate(best.ret);
+  } else {
+    document.getElementById('stat-bestout').textContent = '—';
+    document.getElementById('stat-bestret').textContent = '—';
+  }
+
+  // Render rows
+  document.getElementById('tbody').innerHTML = sorted.map((r, rank) => {
+    let priceHtml, pClass = '';
+    if (r.price !== null) {
+      if (r.price === minP) pClass = 'price-best';
+      else if (r.price <= minP * 1.10) pClass = 'price-near';
+      else pClass = 'price-norm';
+      priceHtml = `<span class="price-display ${pClass}">$${r.price.toLocaleString()}</span>`;
+    } else {
+      priceHtml = `<span class="price-none">not checked</span>`;
+    }
+
+    const isBest = r.price !== null && r.price === minP;
+
+    return `<tr class="${isBest ? 'best-row' : ''}">
+      <td><div class="rank ${rankClass(rank)}">${rank + 1}</div></td>
+      <td>
+        <div><span class="date-chip chip-out">${fmtDate(r.out)}</span></div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">${r.out}</div>
+      </td>
+      <td>
+        <div><span class="date-chip chip-ret">${fmtDate(r.ret)}</span></div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:.2rem">${r.ret}</div>
+      </td>
+      <td>
+        ${priceHtml}
+        <div style="margin-top:.35rem;display:flex;gap:.4rem;align-items:center">
+          <input class="price-input" type="number" min="0" step="1" placeholder="enter $"
+            value="${r.price !== null ? r.price : ''}"
+            onchange="setPrice('${r.key}', this.value)"
+            onblur="setPrice('${r.key}', this.value)"
+          />
+        </div>
+      </td>
+      <td>
+        <div class="age ${ageClass(r.ts)}">${r.ts ? fmtAge(r.ts) : '—'}</div>
+      </td>
+      <td>
+        <input class="notes-input" type="text" placeholder="e.g. Cathay, 1-stop"
+          value="${r.notes.replace(/"/g, '&quot;')}"
+          onchange="setNotes('${r.key}', this.value)"
+          onblur="setNotes('${r.key}', this.value)"
+        />
+      </td>
+      <td>
+        <div class="link-group">
+          <a class="site-btn google-btn" href="${googleUrl(r.out, r.ret)}" target="_blank" rel="noopener" onclick="markChecked('${r.key}')">G</a>
+          <a class="site-btn kayak-btn"  href="${kayakUrl(r.out, r.ret)}"  target="_blank" rel="noopener" onclick="markChecked('${r.key}')">K</a>
+          <a class="site-btn sky-btn"    href="${skyscannerUrl(r.out, r.ret)}" target="_blank" rel="noopener" onclick="markChecked('${r.key}')">S</a>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────
+function setPrice(key, val) {
+  const data = load();
+  const n = parseFloat(val);
+  if (!isNaN(n) && n > 0) {
+    data[key] = { ...(data[key] || {}), price: Math.round(n), ts: Date.now() };
+  } else if (val === '' || val === '0') {
+    if (data[key]) delete data[key].price;
+  }
+  save(data);
+  renderTable();
+}
+
+function setNotes(key, val) {
+  const data = load();
+  data[key] = { ...(data[key] || {}), notes: val };
+  save(data);
+}
+
+function markChecked(key) {
+  const data = load();
+  data[key] = { ...(data[key] || {}), ts: Date.now() };
+  save(data);
+  setTimeout(renderTable, 100);
+}
+
+function clearAllPrices() {
+  if (!confirm('Clear all saved prices and notes?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  renderTable();
+  toast('All prices cleared.');
+}
+
+function openAll(site) {
+  COMBOS.forEach(c => {
+    const url = site === 'google' ? googleUrl(c.out, c.ret) :
+                site === 'kayak'  ? kayakUrl(c.out, c.ret) :
+                                    skyscannerUrl(c.out, c.ret);
+    window.open(url, '_blank', 'noopener');
+  });
+  document.getElementById('last-check').textContent =
+    'All opened at ' + new Date().toLocaleTimeString();
+  toast(`Opened 9 tabs on ${site === 'google' ? 'Google Flights' : site === 'kayak' ? 'Kayak' : 'Skyscanner'}`);
+  // Mark all as checked
+  const data = load();
+  COMBOS.forEach(c => {
+    const key = `${c.out}__${c.ret}`;
+    data[key] = { ...(data[key] || {}), ts: Date.now() };
+  });
+  save(data);
+  setTimeout(renderTable, 200);
+}
+
+function exportCSV() {
+  const data = load();
+  const rows = COMBOS.map(c => {
+    const key = `${c.out}__${c.ret}`;
+    const e = data[key] || {};
+    return [c.out, c.ret, e.price || '', e.notes || '', e.ts ? new Date(e.ts).toLocaleString() : ''].join(',');
+  });
+  const csv = 'Outbound,Return,Price USD,Notes,Last Checked\n' + rows.join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'airfare_jfk_hkg.csv';
+  a.click();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Countdown timer ───────────────────────────────────────────────────────
+let secondsLeft = REFRESH;
+let countdownId;
+
+function resetTimer() {
+  secondsLeft = REFRESH;
+  clearInterval(countdownId);
+  startCountdown();
+  toast('Timer reset to 10:00');
+}
+
+function startCountdown() {
+  const countdown = document.getElementById('countdown');
+  const prog = document.getElementById('prog');
+  const pulse = document.getElementById('pulse');
+
+  countdownId = setInterval(() => {
+    secondsLeft = Math.max(0, secondsLeft - 1);
+    const m = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
+    const s = String(secondsLeft % 60).padStart(2, '0');
+    countdown.textContent = `${m}:${s}`;
+    prog.style.width = (secondsLeft / REFRESH * 100) + '%';
+
+    if (secondsLeft <= 60) {
+      countdown.className = 'countdown alert-c';
+      pulse.className = 'pulse alert-p';
+    } else if (secondsLeft <= 120) {
+      countdown.className = 'countdown warn';
+      pulse.className = 'pulse warn';
+    } else {
+      countdown.className = 'countdown';
+      pulse.className = 'pulse';
+    }
+
+    if (secondsLeft === 0) {
+      clearInterval(countdownId);
+      toast('⏰ Time to check prices! Click "Open All in Google Flights".');
+      // Auto-reset after 30s so it keeps going
+      setTimeout(() => {
+        secondsLeft = REFRESH;
+        startCountdown();
+      }, 30000);
+    }
+  }, 1000);
+}
+
+// ── Refresh age labels every 30s ──────────────────────────────────────────
+setInterval(renderTable, 30000);
+
+// ── Init ──────────────────────────────────────────────────────────────────
+renderTable();
+startCountdown();
+</script>
+</body>
+</html>
