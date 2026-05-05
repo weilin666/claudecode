@@ -1,2 +1,4 @@
 anthropic
 flask
+amadeus
+python-dotenv
